@@ -25,159 +25,212 @@ import src.trainer as trainer
 from src.utils import preprocess
 import tensorflow as tf
 
+import argparse
+
 # -----------------------------------------------------------------------------
-FLAGS = tf.app.flags.FLAGS
+parser = argparse.ArgumentParser()
+parser.add_argument('--train_data_paths', type=str, default='', help='train data paths.')
+parser.add_argument('--valid_data_paths', type=str, default='', help='validation data paths.')
+parser.add_argument('--save_dir', type=str, default='', help='dir to store trained net.')
+parser.add_argument('--gen_frm_dir', type=str, default='', help='dir to store result.')
+parser.add_argument('--is_training', type=bool, default=True, help='training or testing')
+parser.add_argument('--dataset_name', type=str, default='mnist', help='The name of dataset.')
+parser.add_argument('--input_length', type=int, default=10, help='input length.')
+parser.add_argument('--total_length', type=int, default=20, help='total input and output length.')
+parser.add_argument('--img_width', type=int, default=64, help='input image width.')
+parser.add_argument('--img_channel', type=int, default=1, help='number of image channel.')
+parser.add_argument('--patch_size', type=int, default=1, help='patch size on one dimension.')
+parser.add_argument('--reverse_input', type=bool, default=False,
+                    help='reverse the input/outputs during training.')
+parser.add_argument('--model_name', type=str, default='e3d_lstm', help='The name of the architecture.')
+parser.add_argument('--pretrained_model', type=str, default='', help='.ckpt file to initialize from.')
+parser.add_argument('--num_hidden', type=str, default='64,64,64,64',
+                    help='COMMA separated number of units of e3d lstms.')
+parser.add_argument('--filter_size', type=int, default=5, help='filter of a e3d lstm layer.')
+parser.add_argument('--layer_norm', type=bool, default=True,
+                    help='whether to apply tensor layer norm.')
+parser.add_argument('--scheduled_sampling', type=bool, default=True,
+                    help='for scheduled sampling')
+parser.add_argument('--sampling_stop_iter', type=int,
+                    default=50000,
+                    help='for scheduled sampling.')
+parser.add_argument('--sampling_start_value', type=float,
+                    default=1.0,
+                    help='for scheduled sampling.')
+parser.add_argument('--sampling_changing_rate',
+                    type=float,
+                    default=0.00002,
+                    help='for scheduled sampling.')
+parser.add_argument('--lr', type=float,
+                    default=0.001,
+                    help='learning rate.')
+parser.add_argument('--batch_size',
+                    type=int,
+                    default=8,
+                    help='batch size for training.')
+parser.add_argument('--max_iterations',
+                    type=int,
+                    default=80000,
+                    help='max num of steps.')
+parser.add_argument('--display_interval',
+                    type=int,
+                    default=1,
+                    help='number of iters showing training loss.')
+parser.add_argument('--test_interval',
+                    type=int,
+                    default=1000,
+                    help='number of iters for test.')
+parser.add_argument('--snapshot_interval',
+                    type=int,
+                    default=1000,
+                    help='number of iters saving models.')
+parser.add_argument('--num_save_samples',
+                    type=int,
+                    default=10,
+                    help='number of sequences to be saved.')
+parser.add_argument('--n_gpu',
+                    type=int,
+                    default=1,
+                    help=('how many GPUs to distribute the training across.'))
+parser.add_argument('--allow_gpu_growth',
+                    type=bool,
+                    default=True,
+                    help=('allow gpu growth'))
 
-FLAGS.DEFINE_string('train_data_paths', '', 'train data paths.')
-FLAGS.DEFINE_string('valid_data_paths', '', 'validation data paths.')
-FLAGS.DEFINE_string('save_dir', '', 'dir to store trained net.')
-FLAGS.DEFINE_string('gen_frm_dir', '', 'dir to store result.')
-
-FLAGS.DEFINE_boolean('is_training', True, 'training or testing')
-FLAGS.DEFINE_string('dataset_name', 'mnist', 'The name of dataset.')
-FLAGS.DEFINE_integer('input_length', 10, 'input length.')
-FLAGS.DEFINE_integer('total_length', 20, 'total input and output length.')
-FLAGS.DEFINE_integer('img_width', 64, 'input image width.')
-FLAGS.DEFINE_integer('img_channel', 1, 'number of image channel.')
-FLAGS.DEFINE_integer('patch_size', 1, 'patch size on one dimension.')
-FLAGS.DEFINE_boolean('reverse_input', False,
-                     'reverse the input/outputs during training.')
-
-FLAGS.DEFINE_string('model_name', 'e3d_lstm', 'The name of the architecture.')
-FLAGS.DEFINE_string('pretrained_model', '', '.ckpt file to initialize from.')
-FLAGS.DEFINE_string('num_hidden', '64,64,64,64',
-                    'COMMA separated number of units of e3d lstms.')
-FLAGS.DEFINE_integer('filter_size', 5, 'filter of a e3d lstm layer.')
-FLAGS.DEFINE_boolean('layer_norm', True, 'whether to apply tensor layer norm.')
-
-FLAGS.DEFINE_boolean('scheduled_sampling', True, 'for scheduled sampling')
-FLAGS.DEFINE_integer('sampling_stop_iter', 50000, 'for scheduled sampling.')
-FLAGS.DEFINE_float('sampling_start_value', 1.0, 'for scheduled sampling.')
-FLAGS.DEFINE_float('sampling_changing_rate', 0.00002, 'for scheduled sampling.')
-
-FLAGS.DEFINE_float('lr', 0.001, 'learning rate.')
-FLAGS.DEFINE_integer('batch_size', 8, 'batch size for training.')
-FLAGS.DEFINE_integer('max_iterations', 80000, 'max num of steps.')
-FLAGS.DEFINE_integer('display_interval', 1,
-                     'number of iters showing training loss.')
-FLAGS.DEFINE_integer('test_interval', 1000, 'number of iters for test.')
-FLAGS.DEFINE_integer('snapshot_interval', 1000,
-                     'number of iters saving models.')
-FLAGS.DEFINE_integer('num_save_samples', 10, 'number of sequences to be saved.')
-FLAGS.DEFINE_integer('n_gpu', 1,
-                     'how many GPUs to distribute the training across.')
-FLAGS.DEFINE_boolean('allow_gpu_growth', True, 'allow gpu growth')
-
-
+args = parser.parse_args()
+# train_data_paths = args.train_data_paths
+# valid_data_paths = args.valid_data_paths
+# save_dir = args.save_dir
+# gen_frm_dir = args.gen_frm_dir
+# is_training = args.is_training
+# dataset_name = args.dataset_name
+# input_length = args.input_length
+# total_length = args.total_length
+# img_width = args.img_width
+# img_channel = args.img_channel
+# patch_size = args.patch_size
+# reverse_input = args.reverse_input
+# model_name = args.model_name
+# pretrained_model = args.pretrained_model
+# num_hidden = [int(x) for x in args.num_hidden.split(',')]
+# filter_size = args.filter_size
+# layer_norm = args.layer_norm
+# scheduled_sampling = args.scheduled_sampling
+# sampling_stop_iter = args.sampling_stop_iter
+# sampling_start_value = args.sampling_start_value
+# sampling_changing_rate = args.sampling_changing_rate
+# lr = args.lr
+# batch_size = args.batch_size
+# max_iterations = args.max_iterations
+# display_interval = args.display_interval
+# test_interval = args.test_interval
+# snapshot_interval = args.snapshot_interval
+# num_save_samples = args.num_save_samples
+# n_gpu = args.n_gpu
 def main(_):
-  """Main function."""
-  # print(FLAGS.reverse_input)
-  if tf.gfile.Exists(FLAGS.save_dir):
-    tf.gfile.DeleteRecursively(FLAGS.save_dir)
-  tf.gfile.MakeDirs(FLAGS.save_dir)
-  if tf.gfile.Exists(FLAGS.gen_frm_dir):
-    tf.gfile.DeleteRecursively(FLAGS.gen_frm_dir)
-  tf.gfile.MakeDirs(FLAGS.gen_frm_dir)
+  if tf.gfile.Exists(args.save_dir):
+      tf.gfile.DeleteRecursively(args.save_dir)
+      tf.gfile.MakeDirs(args.save_dir)
+  if tf.gfile.Exists(args.gen_frm_dir):
+      tf.gfile.DeleteRecursively(args.gen_frm_dir)
+      tf.gfile.MakeDirs(args.gen_frm_dir)
 
   gpu_list = np.asarray(
       os.environ.get('CUDA_VISIBLE_DEVICES', '-1').split(','), dtype=np.int32)
-  FLAGS.n_gpu = len(gpu_list)
+  n_gpu = len(gpu_list)
   print('Initializing models')
 
-  model = Model(FLAGS)
+  model = Model(args)
 
-  if FLAGS.is_training:
-    train_wrapper(model)
+  if args.is_training:
+      train_wrapper(model)
   else:
-    test_wrapper(model)
-
+      test_wrapper(model)
 
 def schedule_sampling(eta, itr):
-  """Gets schedule sampling parameters for training."""
-  zeros = np.zeros(
-      (FLAGS.batch_size, FLAGS.total_length - FLAGS.input_length - 1,
-       FLAGS.img_width // FLAGS.patch_size, FLAGS.img_width // FLAGS.patch_size,
-       FLAGS.patch_size**2 * FLAGS.img_channel))
-  if not FLAGS.scheduled_sampling:
-    return 0.0, zeros
+    zeros = np.zeros(
+        (args.batch_size, args.total_length - args.input_length - 1,
+         args.img_width // args.patch_size, args.img_width // args.patch_size,
+         args.patch_size**2 * args.img_channel))
+    if not args.scheduled_sampling:
+        return 0.0, zeros
 
-  if itr < FLAGS.sampling_stop_iter:
-    eta -= FLAGS.sampling_changing_rate
-  else:
-    eta = 0.0
-  random_flip = np.random.random_sample(
-      (FLAGS.batch_size, FLAGS.total_length - FLAGS.input_length - 1))
-  true_token = (random_flip < eta)
-  ones = np.ones(
-      (FLAGS.img_width // FLAGS.patch_size, FLAGS.img_width // FLAGS.patch_size,
-       FLAGS.patch_size**2 * FLAGS.img_channel))
-  zeros = np.zeros(
-      (FLAGS.img_width // FLAGS.patch_size, FLAGS.img_width // FLAGS.patch_size,
-       FLAGS.patch_size**2 * FLAGS.img_channel))
-  real_input_flag = []
-  for i in range(FLAGS.batch_size):
-    for j in range(FLAGS.total_length - FLAGS.input_length - 1):
-      if true_token[i, j]:
-        real_input_flag.append(ones)
-      else:
-        real_input_flag.append(zeros)
-  real_input_flag = np.array(real_input_flag)
-  real_input_flag = np.reshape(
-      real_input_flag,
-      (FLAGS.batch_size, FLAGS.total_length - FLAGS.input_length - 1,
-       FLAGS.img_width // FLAGS.patch_size, FLAGS.img_width // FLAGS.patch_size,
-       FLAGS.patch_size**2 * FLAGS.img_channel))
-  return eta, real_input_flag
-
+    if itr < args.sampling_stop_iter:
+        eta -= args.sampling_changing_rate
+    else:
+        eta = 0.0
+    random_flip = np.random.random_sample(
+        (args.batch_size, args.total_length - args.input_length - 1))
+    true_token = (random_flip < eta)
+    ones = np.ones(
+        (args.img_width // args.patch_size, args.img_width // args.patch_size,
+         args.patch_size**2 * args.img_channel))
+    zeros = np.zeros(
+        (args.img_width // args.patch_size, args.img_width // args.patch_size,
+         args.patch_size**2 * args.img_channel))
+    real_input_flag = []
+    for i in range(args.batch_size):
+        for j in range(args.total_length - args.input_length - 1):
+            if true_token[i, j]:
+                real_input_flag.append(ones)
+            else:
+                real_input_flag.append(zeros)
+    real_input_flag = np.array(real_input_flag)
+    real_input_flag = np.reshape(
+        real_input_flag,
+        (args.batch_size, args.total_length - args.input_length - 1,
+         args.img_width // args.patch_size, args.img_width // args.patch_size,
+         args.patch_size**2 * args.img_channel))
+    return eta, real_input_flag
 
 def train_wrapper(model):
-  """Wrapping function to train the model."""
-  if FLAGS.pretrained_model:
-    model.load(FLAGS.pretrained_model)
+  if args.pretrained_model:
+      model.load(args.pretrained_model)
   # load data
   train_input_handle, test_input_handle = datasets_factory.data_provider(
-      FLAGS.dataset_name,
-      FLAGS.train_data_paths,
-      FLAGS.valid_data_paths,
-      FLAGS.batch_size * FLAGS.n_gpu,
-      FLAGS.img_width,
-      seq_length=FLAGS.total_length,
+      args.dataset_name,
+      args.train_data_paths,
+      args.valid_data_paths,
+      args.batch_size * args.n_gpu,
+      args.img_width,
+      seq_length=args.total_length,
       is_training=True)
 
-  eta = FLAGS.sampling_start_value
+  eta = args.sampling_start_value
 
-  for itr in range(1, FLAGS.max_iterations + 1):
+  for itr in range(1, args.max_iterations + 1):
     if train_input_handle.no_batch_left():
-      train_input_handle.begin(do_shuffle=True)
+        train_input_handle.begin(do_shuffle=True)
     ims = train_input_handle.get_batch()
-    if FLAGS.dataset_name == 'penn':
-      ims = ims['frame']
-    ims = preprocess.reshape_patch(ims, FLAGS.patch_size)
+    if args.dataset_name == 'penn':
+        ims = ims['frame']
+    ims = preprocess.reshape_patch(ims, args.patch_size)
 
     eta, real_input_flag = schedule_sampling(eta, itr)
 
-    trainer.train(model, ims, real_input_flag, FLAGS, itr)
+    trainer.train(model, ims, real_input_flag, args, itr)
 
-    if itr % FLAGS.snapshot_interval == 0:
-      model.save(itr)
+    if itr % args.snapshot_interval == 0:
+        model.save(itr)
 
-    if itr % FLAGS.test_interval == 0:
-      trainer.test(model, test_input_handle, FLAGS, itr)
+    if itr % args.test_interval == 0:
+        trainer.test(model, test_input_handle, args, itr)
 
     train_input_handle.next()
 
 
 def test_wrapper(model):
-  model.load(FLAGS.pretrained_model)
-  test_input_handle = datasets_factory.data_provider(
-      FLAGS.dataset_name,
-      FLAGS.train_data_paths,
-      FLAGS.valid_data_paths,
-      FLAGS.batch_size * FLAGS.n_gpu,
-      FLAGS.img_width,
-      is_training=False)
-  trainer.test(model, test_input_handle, FLAGS, 'test_result')
+    model.load(args.pretrained_model)
+    test_input_handle = datasets_factory.data_provider(
+        args.dataset_name,
+        args.train_data_paths,
+        args.valid_data_paths,
+        args.batch_size * args.n_gpu,
+        args.img_width,
+        is_training=False)
+    trainer.test(model, test_input_handle, args, 'test_result')
 
 
 if __name__ == '__main__':
-  tf.app.run()
+    main()
+

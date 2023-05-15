@@ -23,7 +23,7 @@ import datetime
 import os.path
 import cv2
 import numpy as np
-from skimage.measure import compare_ssim
+from skimage.metrics import structural_similarity
 from src.utils import preprocess
 
 
@@ -41,53 +41,53 @@ def batch_psnr(gen_frames, gt_frames):
   return np.mean(psnr)
 
 
-def train(model, ims, real_input_flag, configs, itr):
+def train(model, ims, real_input_flag, args, itr):
   """Trains a model."""
-  ims_list = np.split(ims, configs.n_gpu)
-  cost = model.train(ims_list, configs.lr, real_input_flag, itr)
+  ims_list = np.split(ims, args.n_gpu)
+  cost = model.train(ims_list, args.lr, real_input_flag, itr)
 
-  if configs.reverse_input:
-    ims_rev = np.split(ims[:, ::-1], configs.n_gpu)
-    cost += model.train(ims_rev, configs.lr, real_input_flag, itr)
+  if args.reverse_input:
+    ims_rev = np.split(ims[:, ::-1], args.n_gpu)
+    cost += model.train(ims_rev, args.lr, real_input_flag, itr)
     cost = cost / 2
 
-  if itr % configs.display_interval == 0:
+  if itr % args.display_interval == 0:
     print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
           'itr: ' + str(itr))
     print('training loss: ' + str(cost))
 
 
-def test(model, test_input_handle, configs, save_name):
+def test(model, test_input_handle, args, save_name):
   """Evaluates a model."""
   print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'test...')
   test_input_handle.begin(do_shuffle=False)
-  res_path = os.path.join(configs.gen_frm_dir, str(save_name))
+  res_path = os.path.join(args.gen_frm_dir, str(save_name))
   os.mkdir(res_path)
   avg_mse = 0
   batch_id = 0
   img_mse, ssim, psnr = [], [], []
-  output_length = configs.total_length - configs.input_length
+  output_length = args.total_length - args.input_length
 
   for i in range(output_length):
     img_mse.append(0)
     ssim.append(0)
     psnr.append(0)
 
-  real_input_flag_zero = np.zeros((configs.batch_size, output_length - 1,
-                                   configs.img_width // configs.patch_size,
-                                   configs.img_width // configs.patch_size,
-                                   configs.patch_size**2 * configs.img_channel))
+  real_input_flag_zero = np.zeros((args.batch_size, output_length - 1,
+                                   args.img_width // args.patch_size,
+                                   args.img_width // args.patch_size,
+                                   args.patch_size**2 * args.img_channel))
 
   while not test_input_handle.no_batch_left():
     batch_id = batch_id + 1
     test_ims = test_input_handle.get_batch()
-    test_dat = preprocess.reshape_patch(test_ims, configs.patch_size)
-    test_dat = np.split(test_dat, configs.n_gpu)
+    test_dat = preprocess.reshape_patch(test_ims, args.patch_size)
+    test_dat = np.split(test_dat, args.n_gpu)
     img_gen = model.test(test_dat, real_input_flag_zero)
 
     # Concat outputs of different gpus along batch
     img_gen = np.concatenate(img_gen)
-    img_gen = preprocess.reshape_patch_back(img_gen, configs.patch_size)
+    img_gen = preprocess.reshape_patch_back(img_gen, args.patch_size)
     img_out = img_gen[:, -output_length:]
     target_out = test_ims[:, -output_length:]
     # MSE per frame
@@ -99,17 +99,17 @@ def test(model, test_input_handle, configs, save_name):
       mse = np.square(x - gx).sum()
       img_mse[i] += mse
       avg_mse += mse
-      # for b in range(configs.batch_size):
+      # for b in range(args.batch_size):
       #     ssim[i] += compare_ssim(x[b], gx[b], multichannel=True)
       x = np.uint8(x * 255)
       gx = np.uint8(gx * 255)
       psnr[i] += batch_psnr(gx, x)
 
     # save prediction examples
-    if batch_id <= configs.num_save_samples:
+    if batch_id <= args.num_save_samples:
       path = os.path.join(res_path, str(batch_id))
       os.mkdir(path)
-      for i in range(configs.total_length):
+      for i in range(args.total_length):
         if (i + 1) < 10:
           name = 'gt0' + str(i + 1) + '.png'
         else:
@@ -118,10 +118,10 @@ def test(model, test_input_handle, configs, save_name):
         img_gt = np.uint8(test_ims[0, i] * 255)
         cv2.imwrite(file_name, img_gt)
       for i in range(output_length):
-        if (i + configs.input_length + 1) < 10:
-          name = 'pd0' + str(i + configs.input_length + 1) + '.png'
+        if (i + args.input_length + 1) < 10:
+          name = 'pd0' + str(i + args.input_length + 1) + '.png'
         else:
-          name = 'pd' + str(i + configs.input_length + 1) + '.png'
+          name = 'pd' + str(i + args.input_length + 1) + '.png'
         file_name = os.path.join(path, name)
         img_pd = img_gen[0, i]
         img_pd = np.maximum(img_pd, 0)
@@ -130,17 +130,17 @@ def test(model, test_input_handle, configs, save_name):
         cv2.imwrite(file_name, img_pd)
     test_input_handle.next()
 
-  avg_mse = avg_mse / (batch_id * configs.batch_size * configs.n_gpu)
+  avg_mse = avg_mse / (batch_id * args.batch_size * args.n_gpu)
   print('mse per seq: ' + str(avg_mse))
   for i in range(output_length):
-    print(img_mse[i] / (batch_id * configs.batch_size * configs.n_gpu))
+    print(img_mse[i] / (batch_id * args.batch_size * args.n_gpu))
 
   psnr = np.asarray(psnr, dtype=np.float32) / batch_id
   print('psnr per frame: ' + str(np.mean(psnr)))
   for i in range(output_length):
     print(psnr[i])
 
-  # ssim = np.asarray(ssim, dtype=np.float32) / (configs.batch_size * batch_id)
+  # ssim = np.asarray(ssim, dtype=np.float32) / (args.batch_size * batch_id)
   # print('ssim per frame: ' + str(np.mean(ssim)))
   # for i in range(output_length):
   #     print(ssim[i])
