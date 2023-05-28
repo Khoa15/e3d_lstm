@@ -7,6 +7,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as layers
 
 
+
 class EideticLSTMCell(object):
   """Eidetic LSTM recurrent network cell.
 

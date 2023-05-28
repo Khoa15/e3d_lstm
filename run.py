@@ -127,7 +127,7 @@ args = parser.parse_args()
 # snapshot_interval = args.snapshot_interval
 # num_save_samples = args.num_save_samples
 # n_gpu = args.n_gpu
-def main(_):
+def main():
   if tf.gfile.Exists(args.save_dir):
       tf.gfile.DeleteRecursively(args.save_dir)
       tf.gfile.MakeDirs(args.save_dir)
