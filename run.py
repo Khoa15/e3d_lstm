@@ -128,12 +128,12 @@ args = parser.parse_args()
 # num_save_samples = args.num_save_samples
 # n_gpu = args.n_gpu
 def main():
-  if tf.gfile.Exists(args.save_dir):
-      tf.gfile.DeleteRecursively(args.save_dir)
-      tf.gfile.MakeDirs(args.save_dir)
-  if tf.gfile.Exists(args.gen_frm_dir):
-      tf.gfile.DeleteRecursively(args.gen_frm_dir)
-      tf.gfile.MakeDirs(args.gen_frm_dir)
+  if tf.io.gfile.Exists(args.save_dir):
+      tf.io.gfile.DeleteRecursively(args.save_dir)
+      tf.io.gfile.MakeDirs(args.save_dir)
+  if tf.io.gfile.Exists(args.gen_frm_dir):
+      tf.io.gfile.DeleteRecursively(args.gen_frm_dir)
+      tf.io.gfile.MakeDirs(args.gen_frm_dir)
 
   gpu_list = np.asarray(
       os.environ.get('CUDA_VISIBLE_DEVICES', '-1').split(','), dtype=np.int32)
